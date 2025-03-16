@@ -87,7 +87,7 @@ __hhash_digest hash_double_field_element_merkle_damgard(virgo::fieldElement x, v
     return res;
 }
 
-void merkle_tree::merkle_tree_prover::create_tree_mimc(int ele_num, vector<vector<F>> &dst_ptr, int level, const int element_size = 256 / 8, bool alloc_required = false){
+void merkle_tree::merkle_tree_prover::create_tree_mimc(int ele_num, vector<vector<F>> &dst_ptr, int level, const int element_size, bool alloc_required){
     int current_lvl_size = ele_num;
     //#pragma omp parallel for
     vector<F> aux(4);
@@ -111,7 +111,7 @@ void merkle_tree::merkle_tree_prover::create_tree_mimc(int ele_num, vector<vecto
 }
 
 
-void merkle_tree::merkle_tree_prover::create_tree_sha(int ele_num, vector<vector<__hhash_digest>> &dst_ptr, int level, const int element_size = 256 / 8, bool alloc_required = false){
+void merkle_tree::merkle_tree_prover::create_tree_sha(int ele_num, vector<vector<__hhash_digest>> &dst_ptr, int level, const int element_size, bool alloc_required){
     int current_lvl_size = ele_num;
     //#pragma omp parallel for
    
@@ -135,7 +135,7 @@ void merkle_tree::merkle_tree_prover::create_tree_sha(int ele_num, vector<vector
 }
 
 
-void merkle_tree::merkle_tree_prover::create_tree(int ele_num, vector<vector<__hhash_digest>> &dst_ptr, const int element_size = 256 / 8, bool alloc_required = false)
+void merkle_tree::merkle_tree_prover::create_tree(int ele_num, vector<vector<__hhash_digest>> &dst_ptr, const int element_size, bool alloc_required)
 {
     //assert(element_size == sizeof(prime_field::field_element) * 2);
     

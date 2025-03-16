@@ -17,7 +17,7 @@ export LIBRARY_PATH=$LIBRARY_PATH:/opt/homebrew/Cellar/gmp/6.3.0/lib
 export CPATH=$CPATH:/opt/homebrew/Cellar/gmp/6.3.0/include
 
 # Configure with ARM-specific flags and Clang as required by MCL
-cmake -DCMAKE_BUILD_TYPE=Release -DUSE_ARM_ARCHITECTURE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
+cmake -DCMAKE_BUILD_TYPE=Release -DUSE_ARM_ARCHITECTURE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DUSESHA3=0 ..
 
 # Build
 make
