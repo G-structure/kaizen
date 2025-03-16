@@ -2,6 +2,18 @@
 // Created by 69029 on 6/25/2021.
 //
 
+// Platform specific configuration
+#if defined(__x86_64__) || defined(_M_X64)
+    // x86 specific configuration
+    #define USE_X86_INTRINSICS
+#elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+    // ARM specific configuration
+    #define USE_ARM_ARCHITECTURE
+#else
+    // Generic fallback
+    #define USE_GENERIC_IMPLEMENTATION
+#endif
+
 //#include <mcl/bls12_381.hpp>
 #include "fieldElement.hpp"
 

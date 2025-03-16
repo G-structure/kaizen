@@ -6,6 +6,12 @@
 //#include <regex>
 #include "config_pc.hpp"
 
+// Add missing standard library headers
+#include <queue>
+#include <fstream>
+#include <iostream>
+#include <regex>  // Added for regex support
+
 using namespace std;
 using std::max;
 #define Clients 2

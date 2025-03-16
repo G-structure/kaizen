@@ -3,51 +3,89 @@
 #include "merkle_tree.h"
 #include <vector>
 #include "mimc.h"
-
+#include <cstring>
+#include <cassert>
+#include <iostream>
 
 using namespace std;
 
-int merkle_tree::size_after_padding;
+namespace merkle_tree
+{
+int size_after_padding;
 
-
-void merkle_tree::get_int32(vector<unsigned int> &arr, __hhash_digest hash){
+void get_int32(vector<unsigned int> &arr, __hhash_digest hash)
+{
+#ifdef USE_X86_INTRINSICS
     unsigned int* res_array = reinterpret_cast<unsigned int*>(&hash.h0);
-    for (int i = 0; i < 4; ++i) {
-        arr[i] = res_array[i];
-    }
+    for (int i = 0; i < 4; i++)
+        arr.push_back(res_array[i]);
+    
     res_array = reinterpret_cast<unsigned int*>(&hash.h1);
-    for(int i = 4; i < 8; i++){
-        arr[i] = res_array[i-4];        
+    for (int i = 0; i < 4; i++)
+        arr.push_back(res_array[i]);
+#else
+    // For ARM and other architectures, access the bytes array directly
+    for (int i = 0; i < 8; i++) {
+        unsigned int val = 0;
+        for (int j = 0; j < 4; j++) {
+            val = (val << 8) | hash.bytes[i*4 + j];
+        }
+        arr.push_back(val);
     }
+#endif
 }
 
-__hhash_digest merkle_tree::hash_single_field_element(virgo::fieldElement x)
+__hhash_digest hash_single_field_element(virgo::fieldElement x)
 {
-    __hhash_digest data[2], ret;
-    memset(data, 0, sizeof(data));
+    __hhash_digest data[2];
+#ifdef USE_X86_INTRINSICS
     memcpy(&data[0].h0, &x, sizeof(data[0].h0));
-    assert(sizeof(data[0].h0) == sizeof(x));
-    my_hhash(data, &ret);
-    return ret;
+    memset(&data[0].h1, 0, sizeof(data[0].h1));
+    memset(&data[1], 0, sizeof(data[1]));
+#else
+    // For ARM and other architectures, access the bytes array directly
+    memcpy(data[0].bytes, &x, sizeof(virgo::fieldElement));
+    memset(data[0].bytes + sizeof(virgo::fieldElement), 0, sizeof(data[0].bytes) - sizeof(virgo::fieldElement));
+    memset(data[1].bytes, 0, sizeof(data[1].bytes));
+#endif
+    
+    __hhash_digest res;
+    my_hhash(data, &res);
+    return res;
 }
 
-__hhash_digest merkle_tree::hash_double_field_element_merkle_damgard(virgo::fieldElement x, virgo::fieldElement y, virgo::fieldElement z, virgo::fieldElement w, __hhash_digest prev_hash)
+__hhash_digest hash_double_field_element_merkle_damgard(virgo::fieldElement x, virgo::fieldElement y, virgo::fieldElement z, virgo::fieldElement w, __hhash_digest prev_hash)
 {
-   __hhash_digest data[2], ret;
-    //data[0] = prev_hash;
-    virgo::fieldElement element[2];
-    element[0] = x;
-    element[1] = y;
-    memcpy(&data[0], element, 2 * sizeof(virgo::fieldElement));
-    element[0] = z;
-    element[1] = w;
-    memcpy(&data[1], element, 2 * sizeof(virgo::fieldElement));
-    //printf("%d %d\n",4 * sizeof(virgo::fieldElement),sizeof(__hhash_digest));
-    //assert(2 * sizeof(virgo::field_element) == sizeof(__hhash_digest));
-    my_hhash(data, &ret);
-    return ret;
+    __hhash_digest data[2];
+#ifdef USE_X86_INTRINSICS
+    memcpy(&data[0].h0, &x, sizeof(x));
+    memcpy(&data[0].h1, &y, sizeof(y));
+    memcpy(&data[1].h0, &z, sizeof(z));
+    memcpy(&data[1].h1, &w, sizeof(w));
+#else
+    // For ARM and other architectures, access the bytes array directly
+    memcpy(data[0].bytes, &x, sizeof(x));
+    memcpy(data[0].bytes + sizeof(x), &y, sizeof(y));
+    memcpy(data[1].bytes, &z, sizeof(z));
+    memcpy(data[1].bytes + sizeof(z), &w, sizeof(w));
+#endif
+    
+    __hhash_digest res;
+    my_hhash(data, &res);
+    
+    // XOR with previous hash
+#ifdef USE_X86_INTRINSICS
+    res.h0 = _mm_xor_si128(res.h0, prev_hash.h0);
+    res.h1 = _mm_xor_si128(res.h1, prev_hash.h1);
+#else
+    // For ARM and other architectures, XOR byte by byte
+    for (int i = 0; i < 32; i++) {
+        res.bytes[i] ^= prev_hash.bytes[i];
+    }
+#endif
+    
+    return res;
 }
-
 
 void merkle_tree::merkle_tree_prover::create_tree_mimc(int ele_num, vector<vector<F>> &dst_ptr, int level, const int element_size = 256 / 8, bool alloc_required = false){
     int current_lvl_size = ele_num;
@@ -148,4 +186,5 @@ bool merkle_tree::merkle_tree_verifier::verify_claim(__hhash_digest root_hhash, 
         pos_element /= 2;
     }
     return equals(root_hhash, leaf_hash);
+}
 }

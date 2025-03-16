@@ -1,10 +1,18 @@
-#ifndef __merkle_tree
-#define __merkle_tree
+#ifndef VIRGO_MERKLE_TREE_H
+#define VIRGO_MERKLE_TREE_H
+
+#include <vector>
+#include "config_pc.hpp"
+#if defined(USE_X86_INTRINSICS)
+    #include <immintrin.h>
+#endif
+#include "mimc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <immintrin.h>
-#include <wmmintrin.h>
+#if defined(USE_X86_INTRINSICS)
+    #include <wmmintrin.h>
+#endif
 #include "my_hhash.h"
 #include "fieldElement.hpp"
 

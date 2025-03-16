@@ -1,7 +1,10 @@
 #include "circuit.h"
+#include <cstdio>
 #include "config_pc.hpp"
+#if defined(USE_X86_INTRINSICS)
+    #include <immintrin.h>
+#endif
 #include <algorithm>
-#include "immintrin.h"
 
 using std::max;
 

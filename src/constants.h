@@ -1,6 +1,10 @@
 #pragma once
 
+// Make constants accessible from both C and C++
+#ifdef __cplusplus
 namespace virgo {
+#endif
+
     const int max_fri_depth = 30;
     const int ldt_repeat_num = 33;
 //2^log_slice_number slices, each slice contains N/2^{log_slice_number+1} elements, each element is a pair of 
@@ -11,4 +15,7 @@ namespace virgo {
     const int max_bit_length = 30;
 
     const int packed_size = 4; //4 unsigned long long packed
+
+#ifdef __cplusplus
 }
+#endif
