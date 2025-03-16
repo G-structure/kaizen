@@ -1,12 +1,22 @@
 #include "fieldElement.hpp"
 #include <cstdio>
 #include <chrono>
-#include <immintrin.h>
+#if defined(USE_X86_INTRINSICS)
+    #include <immintrin.h>
+#elif defined(USE_ARM_INTRINSICS)
+    #include <arm_neon.h>
+#endif
 
 namespace virgo {
     const unsigned long long fieldElement::mod = 2305843009213693951LL;
     const unsigned long long fieldElementPacked::mod = 2305843009213693951LL;
+#ifdef USE_X86_INTRINSICS
     __m256i fieldElementPacked::packed_mod, fieldElementPacked::packed_mod_minus_one;
+#elif defined(USE_ARM_INTRINSICS)
+    uint64x2_t fieldElementPacked::packed_mod, fieldElementPacked::packed_mod_minus_one;
+#else
+    unsigned long long fieldElementPacked::packed_mod[4], fieldElementPacked::packed_mod_minus_one[4];
+#endif
     bool fieldElement::initialized = false;
     int fieldElement::multCounter, fieldElement::addCounter;
     bool fieldElement::isCounting;
@@ -110,11 +120,20 @@ namespace virgo {
         fieldElementPacked::init();
     }
 
+    // Platform-specific implementations
+#ifdef USE_X86_INTRINSICS
     void fieldElementPacked::init() {
         packed_mod = _mm256_set_epi64x(mod, mod, mod, mod);
         packed_mod_minus_one = _mm256_set_epi64x(mod - 1, mod - 1, mod - 1, mod - 1);
     }
-
+#else
+    void fieldElementPacked::init() {
+        for (int i = 0; i < 4; i++) {
+            packed_mod[i] = mod;
+            packed_mod_minus_one[i] = mod - 1;
+        }
+    }
+#endif
 
     fieldElement fieldElement::random() {
         fieldElement ret;
@@ -337,13 +356,9 @@ namespace virgo {
         return (x >> 61) + (x & mod);
     }
 
+    // Platform-specific implementations
+#ifdef USE_X86_INTRINSICS
     unsigned long long fieldElement::mymult(const unsigned long long int x, const unsigned long long int y) {
-        //return a value between [0, 2PRIME) = x * y mod PRIME
-        /*
-        unsigned long long lo, hi;
-        lo = _mulx_u64(x, y, &hi);
-        return ((hi << 3) | (lo >> 61)) + (lo & PRIME);
-        */
         unsigned long long hi;
         asm(
         "mov %[x_read], %%rdx;\n"
@@ -358,6 +373,15 @@ namespace virgo {
         );
         return hi;
     }
+#else
+    unsigned long long fieldElement::mymult(const unsigned long long int x, const unsigned long long int y) {
+        // Simple implementation without assembly
+        unsigned __int128 xy = (unsigned __int128)x * y;
+        unsigned long long hi = xy >> 61;
+        unsigned long long lo = xy & mod;
+        return hi + lo;
+    }
+#endif
 
     unsigned long long fieldElement::randomNumber() {
         unsigned long long ret = ::random() % 10;
@@ -366,7 +390,8 @@ namespace virgo {
         return ret;
     }
 
-
+    // Platform-specific implementations for fieldElementPacked
+#ifdef USE_X86_INTRINSICS
     fieldElementPacked::fieldElementPacked() {
         real = _mm256_set_epi64x(0, 0, 0, 0);
         img = _mm256_set_epi64x(0, 0, 0, 0);
@@ -380,27 +405,27 @@ namespace virgo {
 
     fieldElementPacked fieldElementPacked::operator+(const fieldElementPacked &b) const {
         fieldElementPacked ret;
-        ret.img = b.img + img;
-        ret.real = b.real + real;
+        ret.img = _mm256_add_epi64(b.img, img);
+        ret.real = _mm256_add_epi64(b.real, real);
         __m256i msk0, msk1;
         msk0 = _mm256_cmpgt_epi64(ret.img, packed_mod_minus_one);
         msk1 = _mm256_cmpgt_epi64(ret.real, packed_mod_minus_one);
-        ret.img = ret.img - _mm256_and_si256(msk0, packed_mod);
-        ret.real = ret.real - _mm256_and_si256(msk1, packed_mod);
+        ret.img = _mm256_sub_epi64(ret.img, _mm256_and_si256(msk0, packed_mod));
+        ret.real = _mm256_sub_epi64(ret.real, _mm256_and_si256(msk1, packed_mod));
         return ret;
     }
 
     fieldElementPacked fieldElementPacked::operator*(const fieldElementPacked &b) const {
         fieldElementPacked ret;
-        __m256i all_prod = packed_mymult(img + real, b.img + b.real); //at most 6 * mod
+        __m256i all_prod = packed_mymult(_mm256_add_epi64(img, real), _mm256_add_epi64(b.img, b.real)); //at most 6 * mod
         __m256i ac = packed_mymult(real, b.real), bd = packed_mymult(img, b.img); //at most 1.x * mod
         __m256i nac = ac;
         __m256i msk;
         msk = _mm256_cmpgt_epi64(bd, packed_mod_minus_one);
-        bd = _mm256_sub_epi64(bd, _mm256_and_si256(packed_mod, msk));
+        bd = _mm256_sub_epi64(bd, _mm256_and_si256(msk, packed_mod));
 
         msk = _mm256_cmpgt_epi64(nac, packed_mod_minus_one);
-        nac = _mm256_sub_epi64(nac, _mm256_and_si256(packed_mod, msk));
+        nac = _mm256_sub_epi64(nac, _mm256_and_si256(msk, packed_mod));
 
         nac = _mm256_xor_si256(nac, packed_mod);
         bd = _mm256_xor_si256(bd, packed_mod);
@@ -409,7 +434,7 @@ namespace virgo {
         t_img = packed_myMod(t_img);
 
         msk = _mm256_cmpgt_epi64(t_img, packed_mod_minus_one);
-        t_img = _mm256_sub_epi64(t_img, _mm256_and_si256(packed_mod, msk));
+        t_img = _mm256_sub_epi64(t_img, _mm256_and_si256(msk, packed_mod));
 
         ret.img = t_img;
         __m256i t_real = _mm256_add_epi64(ac, bd);
@@ -419,7 +444,7 @@ namespace virgo {
             int res = _mm256_testz_si256(msk, msk);
             if (res)
                 break;
-            t_real = _mm256_sub_epi64(t_real, _mm256_and_si256(packed_mod, msk));
+            t_real = _mm256_sub_epi64(t_real, _mm256_and_si256(msk, packed_mod));
         }
 
         ret.real = t_real;
@@ -428,22 +453,22 @@ namespace virgo {
 
     fieldElementPacked fieldElementPacked::operator-(const fieldElementPacked &b) const {
         fieldElementPacked ret;
-        __m256i tmp_r = b.real ^ packed_mod; //tmp_r == -b.real is true in this prime field
-        __m256i tmp_i = b.img ^ packed_mod; //same as above
-        ret.real = real + tmp_r;
-        ret.img = img + tmp_i;
+        __m256i tmp_r = _mm256_xor_si256(b.real, packed_mod); //tmp_r == -b.real is true in this prime field
+        __m256i tmp_i = _mm256_xor_si256(b.img, packed_mod); //same as above
+        ret.real = _mm256_add_epi64(real, tmp_r);
+        ret.img = _mm256_add_epi64(img, tmp_i);
         __m256i msk0, msk1;
         msk0 = _mm256_cmpgt_epi64(ret.real, packed_mod_minus_one);
         msk1 = _mm256_cmpgt_epi64(ret.img, packed_mod_minus_one);
 
-        ret.real = ret.real - _mm256_and_si256(msk0, packed_mod);
-        ret.img = ret.img - _mm256_and_si256(msk1, packed_mod);
+        ret.real = _mm256_sub_epi64(ret.real, _mm256_and_si256(msk0, packed_mod));
+        ret.img = _mm256_sub_epi64(ret.img, _mm256_and_si256(msk1, packed_mod));
 
         return ret;
     }
 
     void fieldElementPacked::getFieldElement(fieldElement *dst) const {
-        static unsigned long long real_arr[packed_size], img_arr[packed_size];
+        static unsigned long long real_arr[4], img_arr[4];
         _mm256_store_si256((__m256i *)real_arr, real);
         _mm256_store_si256((__m256i *)img_arr, img);
         for (int i = 0; i < 4; ++i)
@@ -454,8 +479,8 @@ namespace virgo {
     }
 
     __mmask8 fieldElementPacked::operator == (const fieldElementPacked &b) const {
-        __m256i res_real = real ^ b.real;
-        __m256i res_img = img ^ b.img;
+        __m256i res_real = _mm256_xor_si256(real, b.real);
+        __m256i res_img = _mm256_xor_si256(img, b.img);
         return _mm256_testz_si256(res_real, res_real) && _mm256_testz_si256(res_img, res_img);
     }
 
@@ -481,7 +506,6 @@ namespace virgo {
 
         __m256i lo = _mm256_add_epi64(bd, ad_bc_sll32);
 
-
         //return ((hi << 3) | (lo >> 61)) + (lo & PRIME);
         return _mm256_add_epi64(_mm256_or_si256(_mm256_slli_epi64(hi, 3), _mm256_srli_epi64(lo, 61)), _mm256_and_si256(lo, packed_mod));
     }
@@ -492,4 +516,107 @@ namespace virgo {
         __m256i and64 = _mm256_and_si256(x, packed_mod);
         return _mm256_add_epi64(srl64, and64);
     }
+#else
+    // Generic implementation of fieldElementPacked
+    fieldElementPacked::fieldElementPacked() {
+        for (int i = 0; i < 4; i++) {
+            real[i] = 0;
+            img[i] = 0;
+        }
+    }
+
+    fieldElementPacked::fieldElementPacked(const fieldElement &x0, const fieldElement &x1, const fieldElement &x2, const fieldElement &x3) {
+        real[0] = x0.real;
+        real[1] = x1.real;
+        real[2] = x2.real;
+        real[3] = x3.real;
+        img[0] = x0.img;
+        img[1] = x1.img;
+        img[2] = x2.img;
+        img[3] = x3.img;
+    }
+
+    fieldElementPacked fieldElementPacked::operator+(const fieldElementPacked &b) const {
+        fieldElementPacked ret;
+        for (int i = 0; i < 4; i++) {
+            ret.real[i] = real[i] + b.real[i];
+            ret.img[i] = img[i] + b.img[i];
+            
+            if (ret.real[i] >= mod)
+                ret.real[i] -= mod;
+            if (ret.img[i] >= mod)
+                ret.img[i] -= mod;
+        }
+        return ret;
+    }
+
+    fieldElementPacked fieldElementPacked::operator-(const fieldElementPacked &b) const {
+        fieldElementPacked ret;
+        for (int i = 0; i < 4; i++) {
+            // Negate b's values
+            unsigned long long neg_real = b.real[i] ^ mod;
+            unsigned long long neg_img = b.img[i] ^ mod;
+            
+            ret.real[i] = real[i] + neg_real;
+            ret.img[i] = img[i] + neg_img;
+            
+            if (ret.real[i] >= mod)
+                ret.real[i] -= mod;
+            if (ret.img[i] >= mod)
+                ret.img[i] -= mod;
+        }
+        return ret;
+    }
+
+    fieldElementPacked fieldElementPacked::operator*(const fieldElementPacked &b) const {
+        fieldElementPacked ret;
+        for (int i = 0; i < 4; i++) {
+            // Use the same algorithm as the scalar multiplication
+            unsigned long long all_prod = fieldElement::mymult(img[i] + real[i], b.img[i] + b.real[i]);
+            unsigned long long ac = fieldElement::mymult(real[i], b.real[i]);
+            unsigned long long bd = fieldElement::mymult(img[i], b.img[i]);
+            
+            unsigned long long nac = ac;
+            if (bd >= mod)
+                bd -= mod;
+            if (nac >= mod)
+                nac -= mod;
+                
+            nac ^= mod; // negate
+            bd ^= mod;  // negate
+            
+            unsigned long long t_img = all_prod + nac + bd;
+            t_img = fieldElement::myMod(t_img);
+            if (t_img >= mod)
+                t_img -= mod;
+                
+            unsigned long long t_real = ac + bd;
+            while (t_real >= mod)
+                t_real -= mod;
+                
+            ret.real[i] = t_real;
+            ret.img[i] = t_img;
+        }
+        return ret;
+    }
+
+    bool fieldElementPacked::operator==(const fieldElementPacked &b) const {
+        for (int i = 0; i < 4; i++) {
+            if (real[i] != b.real[i] || img[i] != b.img[i])
+                return false;
+        }
+        return true;
+    }
+
+    bool fieldElementPacked::operator!=(const fieldElementPacked &b) const {
+        return !(*this == b);
+    }
+
+    void fieldElementPacked::getFieldElement(fieldElement *dst) const {
+        for (int i = 0; i < 4; i++) {
+            dst[i].real = real[i];
+            dst[i].img = img[i];
+        }
+    }
+#endif
 }

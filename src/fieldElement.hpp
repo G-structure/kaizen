@@ -3,7 +3,16 @@
 #include "constants.h"
 #include "typedef.hpp"
 #include <cassert>
-#include <immintrin.h>
+// Platform-specific includes
+#if defined(__x86_64__) || defined(_M_X64)
+    #include <immintrin.h>
+    #define USE_X86_INTRINSICS
+#elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+    // For ARM, we'll use a generic implementation
+    #define USE_GENERIC_IMPLEMENTATION
+#else
+    #define USE_GENERIC_IMPLEMENTATION
+#endif
 #include <vector>
 #include <cstdio>
 #include <iostream>
@@ -107,6 +116,8 @@ namespace virgo {
         friend fieldElementPacked;
     };
 
+#ifdef USE_X86_INTRINSICS
+    // x86 specific implementation
     class fieldElementPacked {
     public:
         __m256i img, real;
@@ -127,8 +138,28 @@ namespace virgo {
 
         static __m256i packed_mymult(const __m256i x, const __m256i y);
         static __m256i packed_myMod(const __m256i x);
-
     };
+#else
+    // Generic implementation without SIMD
+    class fieldElementPacked {
+    public:
+        unsigned long long real[4], img[4];
+
+        fieldElementPacked();
+        fieldElementPacked(const fieldElement &x0, const fieldElement &x1, const fieldElement &x2, const fieldElement &x3);
+
+        static void init();
+        fieldElementPacked operator + (const fieldElementPacked &b) const;
+        fieldElementPacked operator * (const fieldElementPacked &b) const;
+        fieldElementPacked operator - (const fieldElementPacked &b) const;
+        bool operator == (const fieldElementPacked &b) const;
+        bool operator != (const fieldElementPacked &b) const;
+        void getFieldElement(fieldElement *dst) const;
+
+        static const unsigned long long mod;
+        static unsigned long long packed_mod[4], packed_mod_minus_one[4];
+    };
+#endif
 }
 
 

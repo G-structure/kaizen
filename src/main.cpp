@@ -713,7 +713,7 @@ struct feedforward_proof insert_poly(string key,vector<F> poly, vector<F> eval_p
 	temp.eval.push_back(eval);
 	P.poly_map.insert({key,temp});
 	if(evaluate_vector(poly,eval_point) != eval){
-		printf("Error in %s\n",key );
+		printf("Error in %s\n",key.c_str());
 		exit(-1);
 	}
 	return P;
@@ -731,7 +731,7 @@ struct feedforward_proof update_poly(string key, vector<F> eval_point, F eval, s
 	P.poly_map[key].eval_point.push_back(eval_point);
 	P.poly_map[key].eval.push_back(eval);
 	if(evaluate_vector(P.poly_map[key].poly,eval_point) != eval){
-		printf("Error in %s\n",key );
+		printf("Error in %s\n",key.c_str());
 		exit(-1);
 	}
 	return P;

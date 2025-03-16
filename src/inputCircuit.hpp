@@ -3,7 +3,10 @@
 //
 #pragma once
 
-#include <bits/stdc++.h>
+#include <vector>
+#include <map>
+#include <utility>  // for std::pair
+
 using std::pair;
 using std::vector;
 using std::map;

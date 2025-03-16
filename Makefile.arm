@@ -1,0 +1,21 @@
+CXX := g++-14
+CXXFLAGS := -std=c++17 -O3 -I.
+
+# Field element implementation
+FIELD_ELEMENT_SRC := src/fieldElement.cpp
+
+# Test file
+TEST_SRC := test_arm.cpp
+
+# Output binary
+TARGET := arm_test
+
+all: $(TARGET)
+
+$(TARGET): $(TEST_SRC) $(FIELD_ELEMENT_SRC)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+clean:
+	rm -f $(TARGET)
+
+.PHONY: all clean 

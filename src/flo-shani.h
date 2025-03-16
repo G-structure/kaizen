@@ -20,11 +20,21 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
  * OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef SHA_NI_SHA_H
-#define SHA_NI_SHA_H
+#ifndef FLO_SHANI_H
+#define FLO_SHANI_H
 
 #ifdef __cplusplus
-extern "C"{
+extern "C" {
+#endif
+
+#include <stdint.h>
+
+// Only include C++ headers when in C++ mode
+#ifdef __cplusplus
+    #include "config_pc.hpp"
+    #if defined(USE_X86_INTRINSICS)
+        #include <immintrin.h>
+    #endif
 #endif
 
 #ifndef ALIGN_BYTES
@@ -35,9 +45,6 @@ extern "C"{
 #else
 #define ALIGN __attribute__ ((aligned (ALIGN_BYTES)))
 #endif
-
-#include <stdint.h>
-#include <immintrin.h>
 
 #define SHA256_HASH_SIZE 32 /*! <- SHA2-256 produces a 32-byte output. */
 
@@ -95,4 +102,4 @@ dec_sha256_Nw(16);
 }
 #endif
 
-#endif //SHA_NI_SHA_H
+#endif //FLO_SHANI_H
