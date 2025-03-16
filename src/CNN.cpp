@@ -3,6 +3,7 @@
 #include "MLP.h"
 #include "utils.hpp"
 #include "CNN.h"
+#include "cuda_kernels.h"
 #define LENET 1
 #define VGG 2
 #define TEST 3
@@ -104,26 +105,36 @@ F compute_avg(vector<vector<F>> x, int i_start, int j_start, int dim){
 }
 
 
-vector<vector<vector<F>>> avg_pool(vector<vector<vector<F>>> input,int filter_dim){
+vector<vector<vector<F>>> avg_pool(vector<vector<vector<F>>> input, int filter_dim){
 	vector<vector<vector<F>>> avg(input.size());
-	for(int i = 0; i < avg.size(); i++){
-		avg[i].resize(input[i].size()/filter_dim);
-		for(int j = 0; j < avg[i].size(); j++){
-			avg[i][j].resize(input[i][j].size()/filter_dim);
-		}
-	}
-
 	for(int i = 0; i < input.size(); i++){
-		for(int j = 0; j < input[0].size(); j+=filter_dim){
-			for(int k = 0; k < input[0][0].size(); k+=filter_dim){
-				F sum = input[i][j+1][k+1] + input[i][j][k+1] + input[i][j+1][k] +input[i][j][k]; 
-				avg[i][j/filter_dim][k/filter_dim] = divide(sum,quantize(filter_dim*filter_dim));//compute_avg(input[i],j,k,filter_dim);
+		// Use CUDA for average pooling
+		vector<F> flattened_input;
+		int input_dim = input[i].size();
+		
+		// Flatten the 2D input array to 1D for the CUDA kernel
+		for(int j = 0; j < input[i].size(); j++){
+			for(int k = 0; k < input[i][j].size(); k++){
+				flattened_input.push_back(input[i][j][k]);
+			}
+		}
+		
+		// Apply average pooling using CUDA
+		vector<F> pooled_output = cuda_kernels::apply_avg_pooling(
+			flattened_input, input_dim, filter_dim, filter_dim);
+		
+		// Reshape the result
+		int output_dim = input_dim / filter_dim;
+		avg[i].resize(output_dim);
+		for(int j = 0; j < output_dim; j++){
+			avg[i][j].resize(output_dim);
+			for(int k = 0; k < output_dim; k++){
+				avg[i][j][k] = pooled_output[j * output_dim + k];
 			}
 		}
 	}
-
+	
 	return avg;
-
 }
 
 vector<vector<vector<F>>> avg_pool_2(vector<vector<F>> input,int chout,int n,int n_pad,int window){

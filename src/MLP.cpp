@@ -6,6 +6,7 @@
 #include <time.h>
 #include <vector>
 #include "config_pc.hpp"
+#include "cuda_kernels.h"
 
 using namespace std;
 
@@ -65,16 +66,8 @@ void matrix_mul(float **M1, float **M2, float **M3,int m, int n, int l){
 }
 
 vector<vector<F>> _matrix_mul(vector<vector<F>> M1, vector<vector<F>> M2){
-	vector<vector<F>> M;
-	M.resize(M1.size());
-	for(int i = 0; i < M1.size(); i++){
-		M[i].resize(M2.size());
-		for(int j = 0; j < M2.size(); j++){
-			M[i][j] = _inner_product(M1[i],M2[j]);
-			mul_counter += 1;
-		}
-	}
-	return M;
+	// Use CUDA for matrix multiplication
+	return cuda_kernels::matrix_multiply(M1, M2);
 }
 
 
@@ -182,19 +175,13 @@ void relu(float **M1,float **M2,int m, int n){
 
 vector<vector<F>> _relu(vector<vector<F>> M1){
 	vector<vector<F>> M;
-	char buff[257];
 	M.resize(M1.size());
-	for(int i = 0; i < M1.size(); i++){
-		M[i].resize(M1[0].size());
-		for(int j = 0; j < M[i].size(); j++){
-			M[i][j] = M1[i][j];
-			//int n = M[i][j].getStr(buff,257,2);
-			//if(n == 255){
-				//printf("negative\n");
-			//	M[i][j] = F(0);
-			//}
-		}
+	
+	for(int i = 0; i < M1.size(); i++) {
+		// Use CUDA for ReLU activation - process each row
+		M[i] = cuda_kernels::apply_relu(M1[i]);
 	}
+	
 	return M;
 }
 
