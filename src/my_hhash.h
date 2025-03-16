@@ -15,7 +15,12 @@
 #endif
 
 #include "flo-shani.h"
+
+// Define USESHA3 only for x86 architectures
+#if !defined(USE_ARM_ARCHITECTURE) && defined(USE_X86_INTRINSICS)
 #define USESHA3
+#endif
+
 #ifdef USESHA3
 extern "C" {
 #include "../lib/libXKCP.a.headers/SimpleFIPS202.h"
