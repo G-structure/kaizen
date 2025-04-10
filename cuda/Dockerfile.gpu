@@ -1,0 +1,71 @@
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    libgmp-dev \
+    g++ \
+    git \
+    unzip \
+    wget \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up work directory
+WORKDIR /app
+
+# Copy the source code
+COPY . /app/
+
+# Extract third-party dependencies
+RUN if [ -f "3rd.zip" ]; then unzip 3rd.zip; fi
+
+# Compile the simple GPU test to verify CUDA functionality
+RUN nvcc -o test_gpu test_gpu.cu
+
+# Create a build script that enables CUDA
+RUN echo '#!/bin/bash\n\
+mkdir -p build_gpu\n\
+cd build_gpu\n\
+cmake -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON -DUSESHA3=0 ..\n\
+make -j$(nproc)\n\
+cd ..' > /app/build_gpu.sh && chmod +x /app/build_gpu.sh
+
+# Create GPU-specific versions of the test scripts
+RUN echo '#!/bin/bash\n\
+./build_gpu.sh\n\
+cd build_gpu/src\n\
+./main mAlexNet 4 1 4 1\n\
+./main mAlexNet 8 1 4 1\n\
+./main mAlexNet 16 1 4 1\n\
+cd ../..' > /app/alexnet_test_gpu.sh && chmod +x /app/alexnet_test_gpu.sh
+
+RUN echo '#!/bin/bash\n\
+./build_gpu.sh\n\
+cd build_gpu/src\n\
+./main VGG 4 1 4 1\n\
+./main VGG 8 1 4 1\n\
+./main VGG 16 1 4 1\n\
+cd ../..' > /app/vgg_gpu.sh && chmod +x /app/vgg_gpu.sh
+
+RUN echo '#!/bin/bash\n\
+./build_gpu.sh\n\
+cd build_gpu/src\n\
+./main LENET 1 1 -1 1\n\
+./main LENET 2 1 -1 1\n\
+./main LENET 4 1 1 1\n\
+./main LENET 8 1 1 1\n\
+./main LENET 16 1 2 1\n\
+cd ../..' > /app/lenet_test_gpu.sh && chmod +x /app/lenet_test_gpu.sh
+
+# Create a script to first run the GPU test and then build the application
+RUN echo '#!/bin/bash\n\
+echo "Testing GPU functionality..."\n\
+./test_gpu\n\
+echo "Building the application with GPU support..."\n\
+./build_gpu.sh' > /app/run_tests.sh && chmod +x /app/run_tests.sh
+
+# Default command - First run the GPU test, then build the app
+CMD ["./run_tests.sh"] 
