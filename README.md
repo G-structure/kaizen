@@ -81,7 +81,7 @@ The framework includes profiling tools to identify performance bottlenecks:
 ./build/src/run_cnn_profiler     # CNN-specific profiler
 ```
 
-For more information on profiling, see `src/PROFILING_GUIDE.md`.
+For more information on profiling, see `docs/PROFILER.md`.
 
 ## Project Structure
 
