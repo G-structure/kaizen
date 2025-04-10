@@ -7,6 +7,10 @@
 #include <vector>
 #include "config_pc.hpp"
 
+#ifdef USE_CUDA
+#include "cuda_kernels.h"
+#endif
+
 using namespace std;
 
 
@@ -55,13 +59,48 @@ F _inner_product(vector<F> v1, vector<F> v2){
 
 
 
-void matrix_mul(float **M1, float **M2, float **M3,int m, int n, int l){
-	for(int i = 0; i < m; i++){
-		for(int j = 0; j  < l; j++){
-			M3[i][j] = inner_product(M1[i],M2[j],n);
-		}
-	}
-
+void matrix_mul(float **M1, float **M2, float **M3, int m, int n, int l) {
+#ifdef USE_CUDA
+    // Reshape matrices for CUDA (contiguous memory)
+    float *A = new float[m * n];
+    float *B = new float[n * l];
+    float *C = new float[m * l];
+    
+    // Copy data into contiguous arrays
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            A[i * n + j] = M1[i][j];
+        }
+    }
+    
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < l; j++) {
+            B[i * l + j] = M2[i][j];
+        }
+    }
+    
+    // Call CUDA matrix multiplication
+    cuda_matrix_multiply(A, B, C, m, l, n);
+    
+    // Copy result back to output matrix
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < l; j++) {
+            M3[i][j] = C[i * l + j];
+        }
+    }
+    
+    // Clean up
+    delete[] A;
+    delete[] B;
+    delete[] C;
+#else
+    // Original CPU implementation
+    for(int i = 0; i < m; i++){
+        for(int j = 0; j  < l; j++){
+            M3[i][j] = inner_product(M1[i], M2[j], n);
+        }
+    }
+#endif
 }
 
 vector<vector<F>> _matrix_mul(vector<vector<F>> M1, vector<vector<F>> M2){
@@ -169,15 +208,46 @@ vector<vector<F>> _matrix_mul_transposed(vector<vector<F>> M1,vector<vector<F>> 
 }
 
 
-void relu(float **M1,float **M2,int m, int n){
-	for(int i = 0; i < m; i++){
-		for(int j = 0; j < n; j++){
-			M1[i][j] = M2[i][j];
-			if(M1[i][j] < 0){
-				M1[i][j] = 0.0;
-			}
-		}
-	}
+void relu(float **M1, float **M2, int m, int n) {
+#ifdef USE_CUDA
+    // Reshape matrices for CUDA (contiguous memory)
+    float *A = new float[m * n];
+    float *B = new float[m * n];
+    
+    // Copy data into contiguous arrays
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            B[i * n + j] = M2[i][j];
+        }
+    }
+    
+    // Copy B to A for in-place operation
+    memcpy(A, B, m * n * sizeof(float));
+    
+    // Call CUDA ReLU
+    cuda_relu(A, m * n);
+    
+    // Copy result back to output matrix
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            M1[i][j] = A[i * n + j];
+        }
+    }
+    
+    // Clean up
+    delete[] A;
+    delete[] B;
+#else
+    // Original CPU implementation
+    for(int i = 0; i < m; i++){
+        for(int j = 0; j < n; j++){
+            M1[i][j] = M2[i][j];
+            if(M1[i][j] < 0){
+                M1[i][j] = 0.0;
+            }
+        }
+    }
+#endif
 }
 
 vector<vector<F>> _relu(vector<vector<F>> M1){
@@ -550,13 +620,11 @@ void back_propagation(float ***W,float **b,float **X,float **y,float ***Z,float 
 	}
 	for(int i = 0; i < model_layers; i++){
 		for(int j = 0; j < model_params[i][0]; j++){
-			for(int k = 0; k < model_params[i][1]; k++){
-				//printf("%f, ",W[i][j][k] );
-				//printf("%f, %f\n",(0.2*dW[i][j][k])/((float)batch_size), dequantize(W_int[i][j][k],1) );
-				W[i][j][k] = W[i][j][k] - e*dW[i][j][k]/(float)batch_size;
-				//printf("%f \n ",dW[i][j][k] );
-				
-			}
+			//printf("%f, ",W[i][j][k] );
+			//printf("%f, %f\n",(0.2*dW[i][j][k])/((float)batch_size), dequantize(W_int[i][j][k],1) );
+			W[i][j][k] = W[i][j][k] - e*dW[i][j][k]/(float)batch_size;
+			//printf("%f \n ",dW[i][j][k] );
+			
 		}
 	}
 	//printf("%f\n",W[0][0][0] );
